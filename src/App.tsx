@@ -16,6 +16,7 @@ import Pagamentos from "./pages/Pagamentos";
 import Pacotes from "./pages/Pacotes";
 import Recibos from "./pages/Recibos";
 import NotFound from "./pages/NotFound";
+import Instalar from "./pages/Instalar";
 
 const queryClient = new QueryClient();
 
@@ -80,6 +81,7 @@ const App = () => (
             <Route path="pacotes" element={<Pacotes />} />
             <Route path="recibos" element={<Recibos />} />
           </Route>
+          <Route path="/instalar" element={<Instalar />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
