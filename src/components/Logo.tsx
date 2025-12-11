@@ -23,7 +23,7 @@ export function Logo({ size = "md", showText = true, className }: LogoProps) {
         alt="Laís Castro - Massoterapeuta"
         width={icon}
         height={icon}
-        className="rounded-full object-cover drop-shadow-md"
+        className="object-contain"
       />
       
       {showText && (
