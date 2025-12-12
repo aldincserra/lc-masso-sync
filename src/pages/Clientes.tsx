@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,66 +24,35 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useToast } from "@/hooks/use-toast";
-import { Plus, Search, MoreVertical, Pencil, Trash2, Phone, Mail, Users } from "lucide-react";
-
-interface Cliente {
-  id: string;
-  nome: string;
-  celular: string;
-  email: string;
-  dataNascimento: string;
-  cpf: string;
-}
-
-// Mock data - will be replaced with Supabase
-const clientesMock: Cliente[] = [
-  {
-    id: "1",
-    nome: "Maria Silva",
-    celular: "(11) 99999-1234",
-    email: "maria@email.com",
-    dataNascimento: "1985-05-15",
-    cpf: "123.456.789-00",
-  },
-  {
-    id: "2",
-    nome: "João Santos",
-    celular: "(11) 98888-5678",
-    email: "joao@email.com",
-    dataNascimento: "1990-08-22",
-    cpf: "987.654.321-00",
-  },
-  {
-    id: "3",
-    nome: "Ana Oliveira",
-    celular: "(11) 97777-9012",
-    email: "ana@email.com",
-    dataNascimento: "1988-12-03",
-    cpf: "456.789.123-00",
-  },
-];
+import { Plus, Search, MoreVertical, Pencil, Trash2, Phone, Users, History, Loader2 } from "lucide-react";
+import { useClientes, ClienteFormData, Cliente } from "@/hooks/useClientes";
+import { useSessoes } from "@/hooks/useSessoes";
+import { ClienteHistoricoDialog } from "@/components/ClienteHistoricoDialog";
 
 export default function Clientes() {
-  const [clientes, setClientes] = useState<Cliente[]>(clientesMock);
+  const { clientes, loading, addCliente, updateCliente, deleteCliente } = useClientes();
+  const { sessoes, getSessoesCliente } = useSessoes();
   const [searchTerm, setSearchTerm] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCliente, setEditingCliente] = useState<Cliente | null>(null);
-  const { toast } = useToast();
+  const [historicoCliente, setHistoricoCliente] = useState<Cliente | null>(null);
+  const [isHistoricoOpen, setIsHistoricoOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ClienteFormData>({
     nome: "",
     celular: "",
     email: "",
-    dataNascimento: "",
+    data_nascimento: "",
     cpf: "",
+    observacoes: "",
   });
 
   const filteredClientes = clientes.filter(
     (cliente) =>
       cliente.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cliente.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cliente.cpf.includes(searchTerm)
+      (cliente.email && cliente.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (cliente.cpf && cliente.cpf.includes(searchTerm))
   );
 
   const handleOpenDialog = (cliente?: Cliente) => {
@@ -91,10 +60,11 @@ export default function Clientes() {
       setEditingCliente(cliente);
       setFormData({
         nome: cliente.nome,
-        celular: cliente.celular,
-        email: cliente.email,
-        dataNascimento: cliente.dataNascimento,
-        cpf: cliente.cpf,
+        celular: cliente.celular || "",
+        email: cliente.email || "",
+        data_nascimento: cliente.data_nascimento || "",
+        cpf: cliente.cpf || "",
+        observacoes: cliente.observacoes || "",
       });
     } else {
       setEditingCliente(null);
@@ -102,54 +72,50 @@ export default function Clientes() {
         nome: "",
         celular: "",
         email: "",
-        dataNascimento: "",
+        data_nascimento: "",
         cpf: "",
+        observacoes: "",
       });
     }
     setIsDialogOpen(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitting(true);
     
     if (editingCliente) {
-      setClientes(
-        clientes.map((c) =>
-          c.id === editingCliente.id ? { ...c, ...formData } : c
-        )
-      );
-      toast({
-        title: "Cliente atualizado!",
-        description: `${formData.nome} foi atualizado com sucesso.`,
-      });
+      await updateCliente(editingCliente.id, formData);
     } else {
-      const novoCliente: Cliente = {
-        id: Date.now().toString(),
-        ...formData,
-      };
-      setClientes([...clientes, novoCliente]);
-      toast({
-        title: "Cliente cadastrado!",
-        description: `${formData.nome} foi adicionado com sucesso.`,
-      });
+      await addCliente(formData);
     }
     
     setIsDialogOpen(false);
     setEditingCliente(null);
+    setSubmitting(false);
   };
 
-  const handleDelete = (cliente: Cliente) => {
-    setClientes(clientes.filter((c) => c.id !== cliente.id));
-    toast({
-      title: "Cliente excluído",
-      description: `${cliente.nome} foi removido.`,
-      variant: "destructive",
-    });
+  const handleDelete = async (cliente: Cliente) => {
+    await deleteCliente(cliente.id, cliente.nome);
   };
 
-  const formatDate = (dateStr: string) => {
+  const handleViewHistorico = (cliente: Cliente) => {
+    setHistoricoCliente(cliente);
+    setIsHistoricoOpen(true);
+  };
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "-";
     return new Date(dateStr).toLocaleDateString("pt-BR");
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -198,7 +164,6 @@ export default function Clientes() {
                       setFormData({ ...formData, celular: e.target.value })
                     }
                     placeholder="(00) 00000-0000"
-                    required
                   />
                 </div>
                 <div className="space-y-2">
@@ -210,7 +175,6 @@ export default function Clientes() {
                       setFormData({ ...formData, cpf: e.target.value })
                     }
                     placeholder="000.000.000-00"
-                    required
                   />
                 </div>
               </div>
@@ -223,7 +187,6 @@ export default function Clientes() {
                   onChange={(e) =>
                     setFormData({ ...formData, email: e.target.value })
                   }
-                  required
                 />
               </div>
               <div className="space-y-2">
@@ -231,11 +194,10 @@ export default function Clientes() {
                 <Input
                   id="dataNascimento"
                   type="date"
-                  value={formData.dataNascimento}
+                  value={formData.data_nascimento}
                   onChange={(e) =>
-                    setFormData({ ...formData, dataNascimento: e.target.value })
+                    setFormData({ ...formData, data_nascimento: e.target.value })
                   }
-                  required
                 />
               </div>
               <div className="flex gap-3 pt-4">
@@ -247,8 +209,8 @@ export default function Clientes() {
                 >
                   Cancelar
                 </Button>
-                <Button type="submit" variant="brand" className="flex-1">
-                  {editingCliente ? "Salvar" : "Cadastrar"}
+                <Button type="submit" variant="brand" className="flex-1" disabled={submitting}>
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : editingCliente ? "Salvar" : "Cadastrar"}
                 </Button>
               </div>
             </form>
@@ -291,26 +253,31 @@ export default function Clientes() {
                   <TableRow key={cliente.id} className="hover:bg-muted/30">
                     <TableCell>
                       <div>
-                        <p className="font-medium">{cliente.nome}</p>
+                        <button
+                          onClick={() => handleViewHistorico(cliente)}
+                          className="font-medium text-primary hover:underline cursor-pointer text-left"
+                        >
+                          {cliente.nome}
+                        </button>
                         <div className="flex gap-2 md:hidden text-xs text-muted-foreground mt-1">
                           <span className="flex items-center gap-1">
                             <Phone className="h-3 w-3" />
-                            {cliente.celular}
+                            {cliente.celular || "-"}
                           </span>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      {cliente.celular}
+                      {cliente.celular || "-"}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
-                      {cliente.email}
+                      {cliente.email || "-"}
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">
-                      {formatDate(cliente.dataNascimento)}
+                      {formatDate(cliente.data_nascimento)}
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">
-                      {cliente.cpf}
+                      {cliente.cpf || "-"}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -320,6 +287,12 @@ export default function Clientes() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleViewHistorico(cliente)}
+                          >
+                            <History className="h-4 w-4 mr-2" />
+                            Ver Histórico
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => handleOpenDialog(cliente)}
                           >
@@ -349,6 +322,14 @@ export default function Clientes() {
           )}
         </CardContent>
       </Card>
+
+      {/* Historico Dialog */}
+      <ClienteHistoricoDialog
+        cliente={historicoCliente}
+        sessoes={historicoCliente ? getSessoesCliente(historicoCliente.id) : []}
+        isOpen={isHistoricoOpen}
+        onClose={() => setIsHistoricoOpen(false)}
+      />
     </div>
   );
 }

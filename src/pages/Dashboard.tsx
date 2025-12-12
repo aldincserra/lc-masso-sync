@@ -1,54 +1,104 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, Users, DollarSign, Package, Plus, ChevronRight } from "lucide-react";
+import { Calendar, Users, DollarSign, Package, Plus, ChevronRight, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useClientes } from "@/hooks/useClientes";
+import { useSessoes } from "@/hooks/useSessoes";
 
-const stats = [
-  {
-    title: "Clientes",
-    value: "24",
-    icon: Users,
-    color: "text-primary",
-    bg: "bg-primary/10",
-  },
-  {
-    title: "Sessões Hoje",
-    value: "5",
-    icon: Calendar,
-    color: "text-success",
-    bg: "bg-success/10",
-  },
-  {
-    title: "Receita Mensal",
-    value: "R$ 4.850",
-    icon: DollarSign,
-    color: "text-warning",
-    bg: "bg-warning/10",
-  },
-  {
-    title: "Pacotes Ativos",
-    value: "12",
-    icon: Package,
-    color: "text-accent-foreground",
-    bg: "bg-accent",
-  },
-];
-
-const proximasSessoes = [
-  { hora: "09:00", cliente: "Maria Silva", servico: "Massagem Relaxante" },
-  { hora: "10:30", cliente: "João Santos", servico: "Massagem Terapêutica" },
-  { hora: "14:00", cliente: "Ana Oliveira", servico: "Drenagem Linfática" },
-];
-
-const pagamentosPendentes = [
-  { cliente: "Marta Souza", valor: 120.0 },
-  { cliente: "Carlos Lima", valor: 200.0 },
+const servicosDisponiveis = [
+  "Massagem Relaxante",
+  "Massagem Terapêutica",
+  "Drenagem Linfática",
+  "Massagem Desportiva",
+  "Reflexologia",
+  "Quick Massage",
 ];
 
 export default function Dashboard() {
+  const { clientes, loading: loadingClientes } = useClientes();
+  const { sessoes, loading: loadingSessoes, getProximasSessoes } = useSessoes();
+  
   const hoje = new Date();
   const diasSemana = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
   
+  const proximasSessoes = getProximasSessoes();
+  
+  // Calcular sessões de hoje
+  const hojeStr = hoje.toISOString().split("T")[0];
+  const sessoesHoje = sessoes.filter(s => {
+    const sessaoDate = new Date(s.data_sessao).toISOString().split("T")[0];
+    return sessaoDate === hojeStr && s.status === "agendada";
+  });
+
+  // Calcular receita mensal (sessões realizadas no mês)
+  const mesAtual = hoje.getMonth();
+  const anoAtual = hoje.getFullYear();
+  const receitaMensal = sessoes
+    .filter(s => {
+      const sessaoDate = new Date(s.data_sessao);
+      return sessaoDate.getMonth() === mesAtual && 
+             sessaoDate.getFullYear() === anoAtual && 
+             s.status === "realizada" &&
+             s.valor;
+    })
+    .reduce((acc, s) => acc + (s.valor || 0), 0);
+
+  // Calcular pagamentos pendentes (sessões realizadas sem pagamento)
+  const pagamentosPendentes = sessoes
+    .filter(s => s.status === "realizada" && s.valor)
+    .slice(0, 2);
+
+  const stats = [
+    {
+      title: "Clientes",
+      value: loadingClientes ? "..." : clientes.length.toString(),
+      icon: Users,
+      color: "text-primary",
+      bg: "bg-primary/10",
+    },
+    {
+      title: "Sessões Hoje",
+      value: loadingSessoes ? "..." : sessoesHoje.length.toString(),
+      icon: Calendar,
+      color: "text-success",
+      bg: "bg-success/10",
+    },
+    {
+      title: "Receita Mensal",
+      value: loadingSessoes ? "..." : `R$ ${receitaMensal.toFixed(2).replace(".", ",")}`,
+      icon: DollarSign,
+      color: "text-warning",
+      bg: "bg-warning/10",
+    },
+    {
+      title: "Pacotes Ativos",
+      value: "0",
+      icon: Package,
+      color: "text-accent-foreground",
+      bg: "bg-accent",
+    },
+  ];
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+    });
+  };
+
+  const formatTime = (timeStr: string | null) => {
+    if (!timeStr) return "";
+    return timeStr.slice(0, 5);
+  };
+
+  if (loadingClientes || loadingSessoes) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -108,45 +158,60 @@ export default function Dashboard() {
             </Button>
           </CardHeader>
           <CardContent className="space-y-3">
-            {proximasSessoes.map((sessao, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="text-center min-w-[50px]">
-                    <p className="text-lg font-bold text-primary">{sessao.hora}</p>
+            {proximasSessoes.length > 0 ? (
+              proximasSessoes.map((sessao) => (
+                <div
+                  key={sessao.id}
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="text-center min-w-[70px]">
+                      <p className="text-xs text-muted-foreground">{formatDate(sessao.data_sessao)}</p>
+                      <p className="text-lg font-bold text-primary">{formatTime(sessao.horario)}</p>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground">{sessao.cliente?.nome || "Cliente"}</p>
+                      <p className="text-sm text-muted-foreground">{sessao.tipo_servico || "Serviço"}</p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-foreground">{sessao.cliente}</p>
-                    <p className="text-sm text-muted-foreground">{sessao.servico}</p>
-                  </div>
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <ChevronRight className="h-5 w-5 text-muted-foreground" />
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <Calendar className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                <p>Nenhuma sessão agendada</p>
               </div>
-            ))}
+            )}
           </CardContent>
         </Card>
 
         {/* Pagamentos Pendentes */}
         <Card className="shadow-brand-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="font-display text-lg">Pagamentos Pendentes</CardTitle>
+            <CardTitle className="font-display text-lg">Pagamentos Recentes</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {pagamentosPendentes.map((pag, i) => (
-              <div
-                key={i}
-                className="p-3 rounded-lg bg-warning/10 border border-warning/20"
-              >
-                <p className="text-2xl font-bold text-warning">
-                  R$ {pag.valor.toFixed(2).replace(".", ",")}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Cliente: {pag.cliente}
-                </p>
+            {pagamentosPendentes.length > 0 ? (
+              pagamentosPendentes.map((pag) => (
+                <div
+                  key={pag.id}
+                  className="p-3 rounded-lg bg-success/10 border border-success/20"
+                >
+                  <p className="text-2xl font-bold text-success">
+                    R$ {(pag.valor || 0).toFixed(2).replace(".", ",")}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Cliente: {pag.cliente?.nome || "N/A"}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <DollarSign className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                <p>Nenhum pagamento</p>
               </div>
-            ))}
+            )}
             <Button variant="outline" className="w-full" asChild>
               <Link to="/pagamentos">Ver todos</Link>
             </Button>
