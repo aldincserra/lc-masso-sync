@@ -1,4 +1,4 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 import { Logo } from "@/components/Logo";
 import { cn } from "@/lib/utils";
 import {
@@ -12,6 +12,8 @@ import {
   LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface SidebarProps {
   className?: string;
@@ -27,6 +29,26 @@ const navItems = [
 ];
 
 export function Sidebar({ className }: SidebarProps) {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      navigate('/login');
+      toast({
+        title: "Sessão encerrada",
+        description: "Você foi deslogado com sucesso.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: "Erro ao sair. Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <aside
       className={cn(
@@ -78,7 +100,8 @@ export function Sidebar({ className }: SidebarProps) {
         </NavLink>
         <Button
           variant="ghost"
-          className="w-full justify-start gap-3 px-4 text-muted-foreground hover:text-destructive"
+          className="w-full justify-start gap-3 px-4 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+          onClick={handleSignOut}
         >
           <LogOut className="h-5 w-5" />
           Sair

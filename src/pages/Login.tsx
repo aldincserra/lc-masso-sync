@@ -6,14 +6,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Clock, CheckCircle } from "lucide-react";
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [nome, setNome] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [pendingApproval, setPendingApproval] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -23,37 +25,133 @@ export default function Login() {
 
     try {
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
+
+        // Check if user is approved
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('aprovado')
+          .eq('id', data.user?.id)
+          .single();
+
+        if (profileError) {
+          // Profile might not exist yet (first login after signup)
+          toast({
+            title: "Aguardando aprovação",
+            description: "Sua conta está aguardando aprovação do administrador.",
+          });
+          await supabase.auth.signOut();
+          setPendingApproval(true);
+          return;
+        }
+
+        if (!profile?.aprovado) {
+          toast({
+            title: "Aguardando aprovação",
+            description: "Sua conta está aguardando aprovação do administrador.",
+          });
+          await supabase.auth.signOut();
+          setPendingApproval(true);
+          return;
+        }
+
         navigate("/dashboard");
       } else {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/dashboard`,
+            data: {
+              nome: nome,
+            },
           },
         });
         if (error) throw error;
+
+        // Send approval request email
+        try {
+          await supabase.functions.invoke('send-approval-request', {
+            body: {
+              email,
+              nome,
+              userId: data.user?.id,
+            },
+          });
+        } catch (emailError) {
+          console.error('Error sending approval email:', emailError);
+        }
+
         toast({
           title: "Conta criada!",
-          description: "Você já pode fazer login.",
+          description: "Sua solicitação foi enviada. Aguarde aprovação do administrador.",
         });
+        setPendingApproval(true);
         setIsLogin(true);
       }
     } catch (error: any) {
+      let message = "Ocorreu um erro. Tente novamente.";
+      if (error.message?.includes("Invalid login")) {
+        message = "E-mail ou senha incorretos.";
+      } else if (error.message?.includes("already registered")) {
+        message = "Este e-mail já está cadastrado.";
+      }
       toast({
         title: "Erro",
-        description: error.message || "Ocorreu um erro. Tente novamente.",
+        description: message,
         variant: "destructive",
       });
     } finally {
       setLoading(false);
     }
   };
+
+  if (pendingApproval) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gradient-soft p-4">
+        <div className="w-full max-w-md space-y-8 animate-fade-in">
+          <div className="flex justify-center">
+            <Logo size="lg" />
+          </div>
+
+          <div className="bg-card rounded-2xl shadow-brand-lg p-8 space-y-6 text-center">
+            <div className="flex justify-center">
+              <div className="p-4 rounded-full bg-warning/10">
+                <Clock className="h-12 w-12 text-warning" />
+              </div>
+            </div>
+            <div>
+              <h2 className="font-display text-2xl font-semibold text-foreground">
+                Aguardando Aprovação
+              </h2>
+              <p className="text-muted-foreground text-sm mt-2">
+                Sua solicitação de acesso foi enviada para o administrador.
+                Você receberá uma notificação quando sua conta for aprovada.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                setPendingApproval(false);
+                setIsLogin(true);
+              }}
+            >
+              Voltar ao Login
+            </Button>
+          </div>
+
+          <p className="text-center text-xs text-muted-foreground">
+            LC Massoterapia © {new Date().getFullYear()}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gradient-soft p-4">
@@ -77,6 +175,21 @@ export default function Login() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {!isLogin && (
+              <div className="space-y-2">
+                <Label htmlFor="nome">Nome</Label>
+                <Input
+                  id="nome"
+                  type="text"
+                  placeholder="Seu nome completo"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  required={!isLogin}
+                  className="h-12"
+                />
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
               <Input
@@ -100,6 +213,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
+                  minLength={6}
                   className="h-12 pr-10"
                 />
                 <button
@@ -131,7 +245,7 @@ export default function Login() {
               ) : isLogin ? (
                 "Entrar"
               ) : (
-                "Criar conta"
+                "Solicitar Acesso"
               )}
             </Button>
           </form>
@@ -143,7 +257,7 @@ export default function Login() {
               className="text-sm text-primary hover:underline font-medium"
             >
               {isLogin
-                ? "Não tem conta? Criar agora"
+                ? "Não tem conta? Solicitar acesso"
                 : "Já tem conta? Fazer login"}
             </button>
           </div>
