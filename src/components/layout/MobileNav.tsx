@@ -1,6 +1,7 @@
+import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Home, Calendar, Users, CreditCard, LogOut } from "lucide-react";
+import { Home, Calendar, Users, CreditCard, LogOut, Shield } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -14,6 +15,22 @@ const navItems = [
 export function MobileNav() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    const checkAdmin = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: roles } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id)
+          .eq("role", "admin");
+        setIsAdmin(roles && roles.length > 0);
+      }
+    };
+    checkAdmin();
+  }, []);
 
   const handleSignOut = async () => {
     try {
@@ -52,6 +69,22 @@ export function MobileNav() {
             <span>{item.label}</span>
           </NavLink>
         ))}
+        {isAdmin && (
+          <NavLink
+            to="/admin"
+            className={({ isActive }) =>
+              cn(
+                "flex flex-col items-center gap-1 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 min-w-[60px]",
+                isActive
+                  ? "text-primary bg-accent"
+                  : "text-muted-foreground hover:text-primary"
+              )
+            }
+          >
+            <Shield className="h-5 w-5" />
+            <span>Admin</span>
+          </NavLink>
+        )}
         <button
           onClick={handleSignOut}
           className="flex flex-col items-center gap-1 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 min-w-[60px] text-muted-foreground hover:text-destructive"
