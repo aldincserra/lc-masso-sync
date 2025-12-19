@@ -89,9 +89,23 @@ export default function Admin() {
 
       if (pendingError) throw pendingError;
 
+      // Send approval confirmation email to user
+      try {
+        await supabase.functions.invoke("send-approval-confirmation", {
+          body: {
+            email: pendingUser.email,
+            nome: pendingUser.nome,
+          },
+        });
+        console.log("E-mail de confirmação enviado para:", pendingUser.email);
+      } catch (emailError) {
+        console.error("Erro ao enviar e-mail de confirmação:", emailError);
+        // Don't fail the approval if email fails
+      }
+
       toast({
         title: "Usuário aprovado",
-        description: `${pendingUser.nome || pendingUser.email} foi aprovado com sucesso`,
+        description: `${pendingUser.nome || pendingUser.email} foi aprovado e notificado por e-mail`,
       });
 
       await loadPendingUsers();
