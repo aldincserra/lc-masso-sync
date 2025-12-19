@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.send-approval-confirmation]
 verify_jwt = false
+
+[functions.send-rejection-notification]
+verify_jwt = false
