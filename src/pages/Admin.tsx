@@ -132,9 +132,23 @@ export default function Admin() {
 
       if (pendingError) throw pendingError;
 
+      // Send rejection notification email to user
+      try {
+        await supabase.functions.invoke("send-rejection-notification", {
+          body: {
+            email: pendingUser.email,
+            nome: pendingUser.nome,
+          },
+        });
+        console.log("E-mail de rejeição enviado para:", pendingUser.email);
+      } catch (emailError) {
+        console.error("Erro ao enviar e-mail de rejeição:", emailError);
+        // Don't fail the rejection if email fails
+      }
+
       toast({
         title: "Usuário rejeitado",
-        description: `${pendingUser.nome || pendingUser.email} foi rejeitado`,
+        description: `${pendingUser.nome || pendingUser.email} foi rejeitado e notificado por e-mail`,
       });
 
       await loadPendingUsers();
