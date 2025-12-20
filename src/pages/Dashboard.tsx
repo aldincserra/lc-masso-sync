@@ -1,26 +1,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, Users, DollarSign, Package, Plus, ChevronRight, Loader2 } from "lucide-react";
+import { Calendar, DollarSign, Plus, ChevronRight, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useClientes } from "@/hooks/useClientes";
 import { useSessoes } from "@/hooks/useSessoes";
-
-const servicosDisponiveis = [
-  "Massagem Relaxante",
-  "Massagem Terapêutica",
-  "Drenagem Linfática",
-  "Massagem Desportiva",
-  "Reflexologia",
-  "Quick Massage",
-];
+import { StatsCards } from "@/components/dashboard/StatsCards";
+import { SessoesChart } from "@/components/dashboard/SessoesChart";
+import { ReceitaChart } from "@/components/dashboard/ReceitaChart";
+import { ServicosPieChart } from "@/components/dashboard/ServicosPieChart";
 
 export default function Dashboard() {
   const { clientes, loading: loadingClientes } = useClientes();
   const { sessoes, loading: loadingSessoes, getProximasSessoes } = useSessoes();
   
   const hoje = new Date();
-  const diasSemana = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
-  
   const proximasSessoes = getProximasSessoes();
   
   // Calcular sessões de hoje
@@ -33,51 +26,21 @@ export default function Dashboard() {
   // Calcular receita mensal (sessões realizadas no mês)
   const mesAtual = hoje.getMonth();
   const anoAtual = hoje.getFullYear();
-  const receitaMensal = sessoes
-    .filter(s => {
-      const sessaoDate = new Date(s.data_sessao);
-      return sessaoDate.getMonth() === mesAtual && 
-             sessaoDate.getFullYear() === anoAtual && 
-             s.status === "realizada" &&
-             s.valor;
-    })
+  const sessoesRealizadasMes = sessoes.filter(s => {
+    const sessaoDate = new Date(s.data_sessao);
+    return sessaoDate.getMonth() === mesAtual && 
+           sessaoDate.getFullYear() === anoAtual && 
+           s.status === "realizada";
+  });
+  
+  const receitaMensal = sessoesRealizadasMes
+    .filter(s => s.valor)
     .reduce((acc, s) => acc + (s.valor || 0), 0);
 
-  // Calcular pagamentos pendentes (sessões realizadas sem pagamento)
-  const pagamentosPendentes = sessoes
+  // Pagamentos recentes
+  const pagamentosRecentes = sessoes
     .filter(s => s.status === "realizada" && s.valor)
     .slice(0, 2);
-
-  const stats = [
-    {
-      title: "Clientes",
-      value: loadingClientes ? "..." : clientes.length.toString(),
-      icon: Users,
-      color: "text-primary",
-      bg: "bg-primary/10",
-    },
-    {
-      title: "Sessões Hoje",
-      value: loadingSessoes ? "..." : sessoesHoje.length.toString(),
-      icon: Calendar,
-      color: "text-success",
-      bg: "bg-success/10",
-    },
-    {
-      title: "Receita Mensal",
-      value: loadingSessoes ? "..." : `R$ ${receitaMensal.toFixed(2).replace(".", ",")}`,
-      icon: DollarSign,
-      color: "text-warning",
-      bg: "bg-warning/10",
-    },
-    {
-      title: "Pacotes Ativos",
-      value: "0",
-      icon: Package,
-      color: "text-accent-foreground",
-      bg: "bg-accent",
-    },
-  ];
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("pt-BR", {
@@ -123,25 +86,19 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.title} className="gradient-card border-0 shadow-brand-sm hover:shadow-brand-md transition-shadow">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg ${stat.bg}`}>
-                  <stat.icon className={`h-5 w-5 ${stat.color}`} />
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium">
-                    {stat.title}
-                  </p>
-                  <p className="text-xl font-bold text-foreground">{stat.value}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+      {/* Stats Cards */}
+      <StatsCards
+        totalClientes={clientes.length}
+        sessoesHoje={sessoesHoje.length}
+        receitaMensal={receitaMensal}
+        sessoesRealizadasMes={sessoesRealizadasMes.length}
+        loading={loadingClientes || loadingSessoes}
+      />
+
+      {/* Charts Row */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        <SessoesChart sessoes={sessoes} />
+        <ReceitaChart sessoes={sessoes} />
       </div>
 
       {/* Main Grid */}
@@ -186,74 +143,46 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Pagamentos Pendentes */}
-        <Card className="shadow-brand-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="font-display text-lg">Pagamentos Recentes</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {pagamentosPendentes.length > 0 ? (
-              pagamentosPendentes.map((pag) => (
+        {/* Serviços Pie Chart */}
+        <ServicosPieChart sessoes={sessoes} />
+      </div>
+
+      {/* Pagamentos Recentes */}
+      <Card className="shadow-brand-sm">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="font-display text-lg">Pagamentos Recentes</CardTitle>
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/pagamentos" className="text-primary">
+              Ver todos
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {pagamentosRecentes.length > 0 ? (
+              pagamentosRecentes.map((pag) => (
                 <div
                   key={pag.id}
-                  className="p-3 rounded-lg bg-success/10 border border-success/20"
+                  className="p-4 rounded-lg bg-success/10 border border-success/20"
                 >
                   <p className="text-2xl font-bold text-success">
                     R$ {(pag.valor || 0).toFixed(2).replace(".", ",")}
                   </p>
                   <p className="text-sm text-muted-foreground">
-                    Cliente: {pag.cliente?.nome || "N/A"}
+                    {pag.cliente?.nome || "N/A"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {pag.tipo_servico || "Serviço"}
                   </p>
                 </div>
               ))
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="col-span-full text-center py-8 text-muted-foreground">
                 <DollarSign className="h-10 w-10 mx-auto mb-2 opacity-50" />
-                <p>Nenhum pagamento</p>
+                <p>Nenhum pagamento registrado</p>
               </div>
             )}
-            <Button variant="outline" className="w-full" asChild>
-              <Link to="/pagamentos">Ver todos</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Mini Calendar */}
-      <Card className="shadow-brand-sm">
-        <CardHeader className="pb-2">
-          <CardTitle className="font-display text-lg">
-            {hoje.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-7 gap-1 text-center">
-            {diasSemana.map((dia) => (
-              <div key={dia} className="text-xs font-medium text-muted-foreground py-2">
-                {dia}
-              </div>
-            ))}
-            {Array.from({ length: 35 }, (_, i) => {
-              const diaDoMes = i - new Date(hoje.getFullYear(), hoje.getMonth(), 1).getDay() + 1;
-              const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
-              const isCurrentMonth = diaDoMes > 0 && diaDoMes <= diasNoMes;
-              const isToday = diaDoMes === hoje.getDate();
-
-              return (
-                <div
-                  key={i}
-                  className={`py-2 text-sm rounded-lg transition-colors ${
-                    isToday
-                      ? "bg-primary text-primary-foreground font-bold"
-                      : isCurrentMonth
-                      ? "text-foreground hover:bg-muted cursor-pointer"
-                      : "text-muted-foreground/40"
-                  }`}
-                >
-                  {isCurrentMonth ? diaDoMes : ""}
-                </div>
-              );
-            })}
           </div>
         </CardContent>
       </Card>
