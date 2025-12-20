@@ -1,10 +1,13 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell } from "recharts";
 import { Sessao } from "@/hooks/useSessoes";
+import { subDays, subMonths, parseISO, isWithinInterval } from "date-fns";
+import { Period, periodLabels } from "./PeriodFilter";
 
 interface ServicosPieChartProps {
   sessoes: Sessao[];
+  period: Period;
 }
 
 const COLORS = [
@@ -16,11 +19,33 @@ const COLORS = [
   "hsl(350 80% 50%)",
 ];
 
-export function ServicosPieChart({ sessoes }: ServicosPieChartProps) {
+function getDateRange(period: Period): { start: Date; end: Date } {
+  const hoje = new Date();
+  switch (period) {
+    case "30d":
+      return { start: subDays(hoje, 30), end: hoje };
+    case "3m":
+      return { start: subMonths(hoje, 3), end: hoje };
+    case "6m":
+      return { start: subMonths(hoje, 6), end: hoje };
+    case "1y":
+      return { start: subMonths(hoje, 12), end: hoje };
+  }
+}
+
+export function ServicosPieChart({ sessoes, period }: ServicosPieChartProps) {
+  const { start, end } = getDateRange(period);
+  
+  // Filtra sessões pelo período
+  const sessoesFiltradas = sessoes.filter(s => {
+    const dataSessao = parseISO(s.data_sessao);
+    return isWithinInterval(dataSessao, { start, end });
+  });
+  
   // Agrupa por tipo de serviço
   const servicosMap: Record<string, number> = {};
   
-  sessoes.forEach(s => {
+  sessoesFiltradas.forEach(s => {
     const servico = s.tipo_servico || "Não especificado";
     servicosMap[servico] = (servicosMap[servico] || 0) + 1;
   });
@@ -42,7 +67,9 @@ export function ServicosPieChart({ sessoes }: ServicosPieChartProps) {
     return (
       <Card className="shadow-brand-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="font-display text-lg">Serviços Mais Realizados</CardTitle>
+          <CardTitle className="font-display text-lg">
+            Serviços - {periodLabels[period]}
+          </CardTitle>
         </CardHeader>
         <CardContent className="flex items-center justify-center h-[250px]">
           <p className="text-muted-foreground text-sm">Nenhum dado disponível</p>
@@ -54,7 +81,9 @@ export function ServicosPieChart({ sessoes }: ServicosPieChartProps) {
   return (
     <Card className="shadow-brand-sm">
       <CardHeader className="pb-2">
-        <CardTitle className="font-display text-lg">Serviços Mais Realizados</CardTitle>
+        <CardTitle className="font-display text-lg">
+          Serviços - {periodLabels[period]}
+        </CardTitle>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="h-[200px] w-full">

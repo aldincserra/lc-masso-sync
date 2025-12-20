@@ -1,55 +1,65 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis } from "recharts";
 import { Sessao } from "@/hooks/useSessoes";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, parseISO } from "date-fns";
+import { format, subDays, subMonths, eachWeekOfInterval, startOfWeek, endOfWeek, parseISO, isWithinInterval } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Period, periodLabels } from "./PeriodFilter";
 
 interface SessoesChartProps {
   sessoes: Sessao[];
+  period: Period;
 }
 
-export function SessoesChart({ sessoes }: SessoesChartProps) {
+function getDateRange(period: Period): { start: Date; end: Date } {
   const hoje = new Date();
-  const inicioMes = startOfMonth(hoje);
-  const fimMes = endOfMonth(hoje);
+  switch (period) {
+    case "30d":
+      return { start: subDays(hoje, 30), end: hoje };
+    case "3m":
+      return { start: subMonths(hoje, 3), end: hoje };
+    case "6m":
+      return { start: subMonths(hoje, 6), end: hoje };
+    case "1y":
+      return { start: subMonths(hoje, 12), end: hoje };
+  }
+}
+
+export function SessoesChart({ sessoes, period }: SessoesChartProps) {
+  const { start, end } = getDateRange(period);
+  
+  // Filtra sessões pelo período
+  const sessoesFiltradas = sessoes.filter(s => {
+    const dataSessao = parseISO(s.data_sessao);
+    return isWithinInterval(dataSessao, { start, end });
+  });
   
   // Agrupa sessões por semana
-  const diasDoMes = eachDayOfInterval({ start: inicioMes, end: fimMes });
+  const semanas = eachWeekOfInterval({ start, end }, { weekStartsOn: 0 });
   
-  // Agrupa por semana
-  const semanas: { semana: string; realizadas: number; agendadas: number; canceladas: number }[] = [];
-  let semanaAtual = 1;
-  let realizadas = 0;
-  let agendadas = 0;
-  let canceladas = 0;
-  
-  diasDoMes.forEach((dia, index) => {
-    const sessoesNoDia = sessoes.filter(s => {
+  const dadosSemanas = semanas.map((inicioSemana, index) => {
+    const fimSemana = endOfWeek(inicioSemana, { weekStartsOn: 0 });
+    
+    let realizadas = 0;
+    let agendadas = 0;
+    let canceladas = 0;
+    
+    sessoesFiltradas.forEach(s => {
       const dataSessao = parseISO(s.data_sessao);
-      return isSameDay(dataSessao, dia);
+      if (isWithinInterval(dataSessao, { start: inicioSemana, end: fimSemana })) {
+        if (s.status === 'realizada') realizadas++;
+        else if (s.status === 'agendada') agendadas++;
+        else if (s.status === 'cancelada') canceladas++;
+      }
     });
     
-    sessoesNoDia.forEach(s => {
-      if (s.status === 'realizada') realizadas++;
-      else if (s.status === 'agendada') agendadas++;
-      else if (s.status === 'cancelada') canceladas++;
-    });
-    
-    // Nova semana a cada 7 dias
-    if ((index + 1) % 7 === 0 || index === diasDoMes.length - 1) {
-      semanas.push({
-        semana: `Sem ${semanaAtual}`,
-        realizadas,
-        agendadas,
-        canceladas,
-      });
-      semanaAtual++;
-      realizadas = 0;
-      agendadas = 0;
-      canceladas = 0;
-    }
-  });
+    return {
+      semana: `S${index + 1}`,
+      realizadas,
+      agendadas,
+      canceladas,
+    };
+  }).slice(-8); // Limita a 8 semanas para visualização
 
   const chartConfig = {
     realizadas: {
@@ -70,12 +80,12 @@ export function SessoesChart({ sessoes }: SessoesChartProps) {
     <Card className="shadow-brand-sm">
       <CardHeader className="pb-2">
         <CardTitle className="font-display text-lg">
-          Sessões por Semana - {format(hoje, "MMMM yyyy", { locale: ptBR })}
+          Sessões por Semana - {periodLabels[period]}
         </CardTitle>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} className="h-[250px] w-full">
-          <BarChart data={semanas} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <BarChart data={dadosSemanas} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <XAxis 
               dataKey="semana" 
               tick={{ fontSize: 12 }}
