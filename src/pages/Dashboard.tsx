@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar, DollarSign, Plus, ChevronRight, Loader2 } from "lucide-react";
@@ -8,8 +9,10 @@ import { StatsCards } from "@/components/dashboard/StatsCards";
 import { SessoesChart } from "@/components/dashboard/SessoesChart";
 import { ReceitaChart } from "@/components/dashboard/ReceitaChart";
 import { ServicosPieChart } from "@/components/dashboard/ServicosPieChart";
+import { PeriodFilter, Period } from "@/components/dashboard/PeriodFilter";
 
 export default function Dashboard() {
+  const [period, setPeriod] = useState<Period>("3m");
   const { clientes, loading: loadingClientes } = useClientes();
   const { sessoes, loading: loadingSessoes, getProximasSessoes } = useSessoes();
   
@@ -95,10 +98,16 @@ export default function Dashboard() {
         loading={loadingClientes || loadingSessoes}
       />
 
+      {/* Period Filter */}
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-xl font-medium text-foreground">Estatísticas</h2>
+        <PeriodFilter value={period} onChange={setPeriod} />
+      </div>
+
       {/* Charts Row */}
       <div className="grid lg:grid-cols-2 gap-6">
-        <SessoesChart sessoes={sessoes} />
-        <ReceitaChart sessoes={sessoes} />
+        <SessoesChart sessoes={sessoes} period={period} />
+        <ReceitaChart sessoes={sessoes} period={period} />
       </div>
 
       {/* Main Grid */}
@@ -144,7 +153,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Serviços Pie Chart */}
-        <ServicosPieChart sessoes={sessoes} />
+        <ServicosPieChart sessoes={sessoes} period={period} />
       </div>
 
       {/* Pagamentos Recentes */}
