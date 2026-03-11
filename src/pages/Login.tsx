@@ -308,8 +308,7 @@ export default function Login() {
             </svg>
             Entrar com Apple
           </Button>
-
-
+          <div className="text-center">
             <button
               type="button"
               onClick={() => setIsLogin(!isLogin)}
