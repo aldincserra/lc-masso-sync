@@ -1,11 +1,12 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 interface ApprovalConfirmationRequest {
@@ -19,6 +20,52 @@ serve(async (req) => {
   }
 
   try {
+    // Verify JWT and admin role
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const userId = claimsData.claims.sub;
+
+    // Check admin role using service role client
+    const adminClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    );
+
+    const { data: roleData } = await adminClient
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    if (!roleData) {
+      return new Response(JSON.stringify({ error: "Forbidden: admin role required" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { email, nome }: ApprovalConfirmationRequest = await req.json();
 
     console.log(`Enviando confirmação de aprovação para: ${nome} (${email})`);
