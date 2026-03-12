@@ -107,7 +107,7 @@ serve(async (req) => {
             </div>
             <div class="content">
               <div class="message-box">
-                <h2>Olá, ${nome || "Usuário"}!</h2>
+                <h2>Olá, ${escapeHtml(nome || "Usuário")}!</h2>
                 <p>Sua solicitação de acesso foi analisada.</p>
               </div>
               

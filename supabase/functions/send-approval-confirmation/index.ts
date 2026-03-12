@@ -112,7 +112,7 @@ serve(async (req) => {
             </div>
             <div class="content">
               <div class="welcome-box">
-                <h2>Olá, ${nome || "Usuário"}! 🎉</h2>
+                <h2>Olá, ${escapeHtml(nome || "Usuário")}! 🎉</h2>
                 <p>Sua conta foi aprovada e você já pode acessar o sistema.</p>
               </div>
               

@@ -98,7 +98,7 @@ serve(async (req) => {
     const { data, error } = await resend.emails.send({
       from: "Gestão de Atendimentos <onboarding@resend.dev>",
       to: [adminEmail],
-      subject: `🔔 Nova solicitação de acesso: ${nome}`,
+      subject: `🔔 Nova solicitação de acesso: ${escapeHtml(nome || "Não informado")}`,
       html: `
         <!DOCTYPE html>
         <html>
