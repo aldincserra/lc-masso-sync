@@ -113,20 +113,6 @@ serve(async (req) => {
       );
     }
 
-    // Validate that the userId corresponds to an actual profile
-    const { data: profile } = await adminClient
-      .from("profiles")
-      .select("id")
-      .eq("id", userId)
-      .maybeSingle();
-
-    if (!profile) {
-      return new Response(
-        JSON.stringify({ error: "Invalid user" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const adminEmail = Deno.env.get("ADMIN_EMAIL");
     if (!adminEmail) {
       console.error("ADMIN_EMAIL secret not configured");
