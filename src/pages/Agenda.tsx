@@ -31,9 +31,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Plus, ChevronLeft, ChevronRight, Clock, Loader2, Check, ChevronsUpDown, UserPlus } from "lucide-react";
-import { useSessoes, SessaoFormData } from "@/hooks/useSessoes";
+import { useSessoes, SessaoFormData, Sessao } from "@/hooks/useSessoes";
 import { useClientes, ClienteFormData } from "@/hooks/useClientes";
 import { cn } from "@/lib/utils";
+import { SessaoDetailDialog } from "@/components/sessao/SessaoDetailDialog";
+import { formatPhone } from "@/lib/validators";
 
 const servicosDisponiveis = [
   "Massagem Relaxante",
@@ -52,6 +54,8 @@ export default function Agenda() {
   const [isNewClienteDialogOpen, setIsNewClienteDialogOpen] = useState(false);
   const [clientePopoverOpen, setClientePopoverOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedSessao, setSelectedSessao] = useState<Sessao | null>(null);
+  const [isSessaoDetailOpen, setIsSessaoDetailOpen] = useState(false);
 
   const [formData, setFormData] = useState<SessaoFormData>({
     cliente_id: "",
@@ -80,15 +84,8 @@ export default function Agenda() {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
     const days = [];
-    
-    for (let i = 0; i < firstDay.getDay(); i++) {
-      days.push(null);
-    }
-    
-    for (let d = 1; d <= lastDay.getDate(); d++) {
-      days.push(new Date(year, month, d));
-    }
-    
+    for (let i = 0; i < firstDay.getDay(); i++) days.push(null);
+    for (let d = 1; d <= lastDay.getDate(); d++) days.push(new Date(year, month, d));
     return days;
   };
 
@@ -105,37 +102,20 @@ export default function Agenda() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    
     await addSessao(formData);
-    
     setIsDialogOpen(false);
-    setFormData({
-      cliente_id: "",
-      data_sessao: "",
-      horario: "",
-      tipo_servico: "",
-      valor: "",
-      observacoes: "",
-    });
+    setFormData({ cliente_id: "", data_sessao: "", horario: "", tipo_servico: "", valor: "", observacoes: "" });
     setSubmitting(false);
   };
 
   const handleNovoCliente = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    
     const novoCliente = await addCliente(novoClienteForm);
     if (novoCliente) {
       setFormData({ ...formData, cliente_id: novoCliente.id });
       setIsNewClienteDialogOpen(false);
-      setNovoClienteForm({
-        nome: "",
-        celular: "",
-        email: "",
-        data_nascimento: "",
-        cpf: "",
-        observacoes: "",
-      });
+      setNovoClienteForm({ nome: "", celular: "", email: "", data_nascimento: "", cpf: "", observacoes: "" });
     }
     setSubmitting(false);
   };
@@ -151,9 +131,17 @@ export default function Agenda() {
 
   const selectedDateSessoes = getSessoesForDate(selectedDate);
   const selectedClienteName = useMemo(() => {
-    const cliente = clientes.find(c => c.id === formData.cliente_id);
-    return cliente?.nome || "";
+    return clientes.find(c => c.id === formData.cliente_id)?.nome || "";
   }, [clientes, formData.cliente_id]);
+
+  const handleSessaoClick = (sessao: Sessao) => {
+    setSelectedSessao(sessao);
+    setIsSessaoDetailOpen(true);
+  };
+
+  const handleSessaoStatusUpdate = (updated: Sessao) => {
+    // Will be refreshed by hooks
+  };
 
   if (loading) {
     return (
@@ -168,12 +156,8 @@ export default function Agenda() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl font-semibold text-foreground">
-            Agenda
-          </h1>
-          <p className="text-muted-foreground">
-            Gerencie suas sessões e horários
-          </p>
+          <h1 className="font-display text-3xl font-semibold text-foreground">Agenda</h1>
+          <p className="text-muted-foreground">Gerencie suas sessões e horários</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -192,12 +176,7 @@ export default function Agenda() {
                 <div className="flex gap-2">
                   <Popover open={clientePopoverOpen} onOpenChange={setClientePopoverOpen}>
                     <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={clientePopoverOpen}
-                        className="flex-1 justify-between"
-                      >
+                      <Button variant="outline" role="combobox" aria-expanded={clientePopoverOpen} className="flex-1 justify-between">
                         {selectedClienteName || "Selecione um cliente..."}
                         <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                       </Button>
@@ -217,12 +196,7 @@ export default function Agenda() {
                                   setClientePopoverOpen(false);
                                 }}
                               >
-                                <Check
-                                  className={cn(
-                                    "mr-2 h-4 w-4",
-                                    formData.cliente_id === cliente.id ? "opacity-100" : "opacity-0"
-                                  )}
-                                />
+                                <Check className={cn("mr-2 h-4 w-4", formData.cliente_id === cliente.id ? "opacity-100" : "opacity-0")} />
                                 {cliente.nome}
                               </CommandItem>
                             ))}
@@ -231,32 +205,18 @@ export default function Agenda() {
                       </Command>
                     </PopoverContent>
                   </Popover>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setIsNewClienteDialogOpen(true)}
-                  >
+                  <Button type="button" variant="outline" size="icon" onClick={() => setIsNewClienteDialogOpen(true)}>
                     <UserPlus className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="servico">Serviço</Label>
-                <Select
-                  value={formData.tipo_servico}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, tipo_servico: value })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o serviço" />
-                  </SelectTrigger>
+                <Select value={formData.tipo_servico} onValueChange={(value) => setFormData({ ...formData, tipo_servico: value })}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o serviço" /></SelectTrigger>
                   <SelectContent>
                     {servicosDisponiveis.map((servico) => (
-                      <SelectItem key={servico} value={servico}>
-                        {servico}
-                      </SelectItem>
+                      <SelectItem key={servico} value={servico}>{servico}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -264,57 +224,20 @@ export default function Agenda() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="data">Data</Label>
-                  <Input
-                    id="data"
-                    type="date"
-                    value={formData.data_sessao}
-                    onChange={(e) =>
-                      setFormData({ ...formData, data_sessao: e.target.value })
-                    }
-                    required
-                  />
+                  <Input id="data" type="date" value={formData.data_sessao} onChange={(e) => setFormData({ ...formData, data_sessao: e.target.value })} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="hora">Horário</Label>
-                  <Input
-                    id="hora"
-                    type="time"
-                    value={formData.horario}
-                    onChange={(e) =>
-                      setFormData({ ...formData, horario: e.target.value })
-                    }
-                    required
-                  />
+                  <Input id="hora" type="time" value={formData.horario} onChange={(e) => setFormData({ ...formData, horario: e.target.value })} required />
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="valor">Valor (R$)</Label>
-                <Input
-                  id="valor"
-                  type="number"
-                  step="0.01"
-                  value={formData.valor}
-                  onChange={(e) =>
-                    setFormData({ ...formData, valor: e.target.value })
-                  }
-                  placeholder="0,00"
-                />
+                <Input id="valor" type="number" step="0.01" value={formData.valor} onChange={(e) => setFormData({ ...formData, valor: e.target.value })} placeholder="0,00" />
               </div>
               <div className="flex gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setIsDialogOpen(false)}
-                >
-                  Cancelar
-                </Button>
-                <Button 
-                  type="submit" 
-                  variant="brand" 
-                  className="flex-1" 
-                  disabled={submitting || !formData.cliente_id}
-                >
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setIsDialogOpen(false)}>Cancelar</Button>
+                <Button type="submit" variant="brand" className="flex-1" disabled={submitting || !formData.cliente_id}>
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Agendar"}
                 </Button>
               </div>
@@ -322,7 +245,7 @@ export default function Agenda() {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog para novo cliente */}
+        {/* Dialog novo cliente */}
         <Dialog open={isNewClienteDialogOpen} onOpenChange={setIsNewClienteDialogOpen}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
@@ -331,14 +254,7 @@ export default function Agenda() {
             <form onSubmit={handleNovoCliente} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="novoNome">Nome completo</Label>
-                <Input
-                  id="novoNome"
-                  value={novoClienteForm.nome}
-                  onChange={(e) =>
-                    setNovoClienteForm({ ...novoClienteForm, nome: e.target.value })
-                  }
-                  required
-                />
+                <Input id="novoNome" value={novoClienteForm.nome} onChange={(e) => setNovoClienteForm({ ...novoClienteForm, nome: e.target.value })} required />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -346,33 +262,18 @@ export default function Agenda() {
                   <Input
                     id="novoCelular"
                     value={novoClienteForm.celular}
-                    onChange={(e) =>
-                      setNovoClienteForm({ ...novoClienteForm, celular: e.target.value })
-                    }
+                    onChange={(e) => setNovoClienteForm({ ...novoClienteForm, celular: formatPhone(e.target.value) })}
                     placeholder="(00) 00000-0000"
+                    maxLength={15}
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="novoEmail">E-mail</Label>
-                  <Input
-                    id="novoEmail"
-                    type="email"
-                    value={novoClienteForm.email}
-                    onChange={(e) =>
-                      setNovoClienteForm({ ...novoClienteForm, email: e.target.value })
-                    }
-                  />
+                  <Input id="novoEmail" type="email" value={novoClienteForm.email} onChange={(e) => setNovoClienteForm({ ...novoClienteForm, email: e.target.value })} />
                 </div>
               </div>
               <div className="flex gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setIsNewClienteDialogOpen(false)}
-                >
-                  Cancelar
-                </Button>
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setIsNewClienteDialogOpen(false)}>Cancelar</Button>
                 <Button type="submit" variant="brand" className="flex-1" disabled={submitting}>
                   {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Cadastrar e Selecionar"}
                 </Button>
@@ -387,35 +288,21 @@ export default function Agenda() {
         <Card className="lg:col-span-2 shadow-brand-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="font-display text-lg">
-              {selectedDate.toLocaleDateString("pt-BR", {
-                month: "long",
-                year: "numeric",
-              })}
+              {selectedDate.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
             </CardTitle>
             <div className="flex gap-1">
-              <Button variant="ghost" size="icon" onClick={handlePrevMonth}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button variant="ghost" size="icon" onClick={handleNextMonth}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              <Button variant="ghost" size="icon" onClick={handlePrevMonth}><ChevronLeft className="h-4 w-4" /></Button>
+              <Button variant="ghost" size="icon" onClick={handleNextMonth}><ChevronRight className="h-4 w-4" /></Button>
             </div>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-7 gap-1 text-center">
               {diasSemana.map((dia) => (
-                <div
-                  key={dia}
-                  className="text-xs font-medium text-muted-foreground py-2"
-                >
-                  {dia}
-                </div>
+                <div key={dia} className="text-xs font-medium text-muted-foreground py-2">{dia}</div>
               ))}
               {days.map((day, i) => {
-                const isToday =
-                  day?.toDateString() === hoje.toDateString();
-                const isSelected =
-                  day?.toDateString() === selectedDate.toDateString();
+                const isToday = day?.toDateString() === hoje.toDateString();
+                const isSelected = day?.toDateString() === selectedDate.toDateString();
                 const hasSessoes = day && getSessoesForDate(day).length > 0;
 
                 return (
@@ -444,41 +331,34 @@ export default function Agenda() {
           </CardContent>
         </Card>
 
-        {/* Day Sessions */}
+        {/* Day Sessions - clickable */}
         <Card className="shadow-brand-sm">
           <CardHeader className="pb-2">
             <CardTitle className="font-display text-lg">
-              {selectedDate.toLocaleDateString("pt-BR", {
-                weekday: "long",
-                day: "numeric",
-                month: "short",
-              })}
+              {selectedDate.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "short" })}
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {selectedDateSessoes.length > 0 ? (
               selectedDateSessoes.map((sessao) => (
-                <div
+                <button
                   key={sessao.id}
-                  className={`p-3 rounded-lg border ${
+                  onClick={() => handleSessaoClick(sessao)}
+                  className={`w-full text-left p-3 rounded-lg border transition-colors hover:opacity-80 ${
                     sessao.status === "realizada"
                       ? "bg-success/10 border-success/20"
                       : sessao.status === "cancelada"
                       ? "bg-destructive/10 border-destructive/20"
-                      : "bg-muted/50 border-border"
+                      : "bg-muted/50 border-border hover:bg-muted"
                   }`}
                 >
                   <div className="flex items-center gap-2 text-sm font-medium text-primary mb-1">
                     <Clock className="h-4 w-4" />
                     {sessao.horario?.slice(0, 5) || "Horário não definido"}
                   </div>
-                  <p className="font-medium text-foreground">
-                    {sessao.cliente?.nome || "Cliente não encontrado"}
-                  </p>
-                  <p className="text-sm text-muted-foreground">
-                    {sessao.tipo_servico || "Serviço não especificado"}
-                  </p>
-                </div>
+                  <p className="font-medium text-foreground">{sessao.cliente?.nome || "Cliente não encontrado"}</p>
+                  <p className="text-sm text-muted-foreground">{sessao.tipo_servico || "Serviço não especificado"}</p>
+                </button>
               ))
             ) : (
               <div className="text-center py-8 text-muted-foreground">
@@ -489,6 +369,14 @@ export default function Agenda() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Session Detail Dialog */}
+      <SessaoDetailDialog
+        sessao={selectedSessao}
+        isOpen={isSessaoDetailOpen}
+        onClose={() => setIsSessaoDetailOpen(false)}
+        onStatusUpdate={handleSessaoStatusUpdate}
+      />
     </div>
   );
 }
