@@ -1,5 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, Calendar, DollarSign, Package, TrendingUp, TrendingDown } from "lucide-react";
+import { Users, Calendar, DollarSign, TrendingUp } from "lucide-react";
 
 interface StatsCardsProps {
   totalClientes: number;
@@ -7,6 +7,7 @@ interface StatsCardsProps {
   receitaMensal: number;
   sessoesRealizadasMes: number;
   loading: boolean;
+  onCardClick?: (type: string) => void;
 }
 
 export function StatsCards({
@@ -15,6 +16,7 @@ export function StatsCards({
   receitaMensal,
   sessoesRealizadasMes,
   loading,
+  onCardClick,
 }: StatsCardsProps) {
   const stats = [
     {
@@ -23,6 +25,7 @@ export function StatsCards({
       icon: Users,
       color: "text-primary",
       bg: "bg-primary/10",
+      clickType: "clientes",
     },
     {
       title: "Sessões Hoje",
@@ -30,6 +33,7 @@ export function StatsCards({
       icon: Calendar,
       color: "text-success",
       bg: "bg-success/10",
+      clickType: "sessoesHoje",
     },
     {
       title: "Receita Mensal",
@@ -37,6 +41,7 @@ export function StatsCards({
       icon: DollarSign,
       color: "text-warning",
       bg: "bg-warning/10",
+      clickType: "receitaMensal",
     },
     {
       title: "Sessões no Mês",
@@ -44,22 +49,25 @@ export function StatsCards({
       icon: TrendingUp,
       color: "text-primary",
       bg: "bg-primary/10",
+      clickType: "sessoesMes",
     },
   ];
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
       {stats.map((stat) => (
-        <Card key={stat.title} className="gradient-card border-0 shadow-brand-sm hover:shadow-brand-md transition-shadow">
+        <Card
+          key={stat.title}
+          className="gradient-card border-0 shadow-brand-sm hover:shadow-brand-md transition-shadow cursor-pointer"
+          onClick={() => onCardClick?.(stat.clickType)}
+        >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className={`p-2 rounded-lg ${stat.bg}`}>
                 <stat.icon className={`h-5 w-5 ${stat.color}`} />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground font-medium">
-                  {stat.title}
-                </p>
+                <p className="text-xs text-muted-foreground font-medium">{stat.title}</p>
                 <p className="text-xl font-bold text-foreground">{stat.value}</p>
               </div>
             </div>

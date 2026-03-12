@@ -28,6 +28,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, TrendingUp, TrendingDown, DollarSign, Search } from "lucide-react";
+import { CaixaFilters, CaixaFilterType, CaixaDateRange } from "@/components/caixa/CaixaFilters";
+import { useSessoes, Sessao } from "@/hooks/useSessoes";
+import { startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
+import { SessaoDetailDialog } from "@/components/sessao/SessaoDetailDialog";
 
 interface Pagamento {
   id: string;
@@ -38,6 +42,7 @@ interface Pagamento {
   tipo: "entrada" | "saida";
   formaPagamento: string;
   status: "pago" | "pendente";
+  sessaoId?: string;
 }
 
 const pagamentosMock: Pagamento[] = [
@@ -84,10 +89,24 @@ const pagamentosMock: Pagamento[] = [
 ];
 
 export default function Pagamentos() {
+  const hoje = new Date();
   const [pagamentos, setPagamentos] = useState<Pagamento[]>(pagamentosMock);
   const [searchTerm, setSearchTerm] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<CaixaFilterType>("mes");
+  const [dateRange, setDateRange] = useState<CaixaDateRange>({
+    from: startOfMonth(hoje),
+    to: endOfMonth(hoje),
+  });
+  const { sessoes } = useSessoes();
+  const [selectedSessao, setSelectedSessao] = useState<Sessao | null>(null);
+  const [isSessaoDetailOpen, setIsSessaoDetailOpen] = useState(false);
   const { toast } = useToast();
+
+  // For entry description - show sessions list
+  const [showSessoesList, setShowSessoesList] = useState(false);
+  const sessoesAgendadas = sessoes.filter(s => s.status === "agendada");
 
   const [formData, setFormData] = useState({
     clienteNome: "",
@@ -96,27 +115,56 @@ export default function Pagamentos() {
     tipo: "entrada" as "entrada" | "saida",
     formaPagamento: "",
     status: "pago" as "pago" | "pendente",
+    sessaoId: "",
   });
 
-  const totalEntradas = pagamentos
+  const handleFilterChange = (filter: CaixaFilterType, range: CaixaDateRange) => {
+    setActiveFilter(filter);
+    setDateRange(range);
+  };
+
+  // Filter by date range
+  const dateFilteredPagamentos = pagamentos.filter((p) => {
+    const pDate = new Date(p.data);
+    return isWithinInterval(pDate, { start: dateRange.from, end: dateRange.to });
+  });
+
+  // Filter by status
+  const statusFilteredPagamentos = statusFilter
+    ? dateFilteredPagamentos.filter((p) => p.status === statusFilter)
+    : dateFilteredPagamentos;
+
+  // Filter by search
+  const filteredPagamentos = statusFilteredPagamentos.filter(
+    (p) =>
+      p.clienteNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.descricao.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const totalEntradas = dateFilteredPagamentos
     .filter((p) => p.tipo === "entrada" && p.status === "pago")
     .reduce((sum, p) => sum + p.valor, 0);
 
-  const totalSaidas = pagamentos
+  const totalSaidas = dateFilteredPagamentos
     .filter((p) => p.tipo === "saida" && p.status === "pago")
     .reduce((sum, p) => sum + p.valor, 0);
 
-  const totalPendente = pagamentos
+  const totalPendente = dateFilteredPagamentos
     .filter((p) => p.status === "pendente")
     .reduce((sum, p) => sum + p.valor, 0);
 
   const saldo = totalEntradas - totalSaidas;
 
-  const filteredPagamentos = pagamentos.filter(
-    (p) =>
-      p.clienteNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.descricao.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleSelectSessao = (sessao: Sessao) => {
+    setFormData({
+      ...formData,
+      descricao: `${sessao.tipo_servico || "Sessão"} - ${sessao.cliente?.nome || "Cliente"}`,
+      clienteNome: sessao.cliente?.nome || "",
+      valor: (sessao.valor || 0).toString(),
+      sessaoId: sessao.id,
+    });
+    setShowSessoesList(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -130,6 +178,7 @@ export default function Pagamentos() {
       tipo: formData.tipo,
       formaPagamento: formData.formaPagamento,
       status: formData.status,
+      sessaoId: formData.sessaoId || undefined,
     };
 
     setPagamentos([novoPagamento, ...pagamentos]);
@@ -141,6 +190,7 @@ export default function Pagamentos() {
       tipo: "entrada",
       formaPagamento: "",
       status: "pago",
+      sessaoId: "",
     });
 
     toast({
@@ -150,14 +200,19 @@ export default function Pagamentos() {
   };
 
   const formatCurrency = (value: number) => {
-    return value.toLocaleString("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-    });
+    return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
   };
 
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString("pt-BR");
+  };
+
+  const handleStatusCardClick = (status: string | null) => {
+    setStatusFilter(statusFilter === status ? null : status);
+  };
+
+  const handleSessaoStatusUpdate = (updated: Sessao) => {
+    // Refresh handled by hooks
   };
 
   return (
@@ -165,12 +220,8 @@ export default function Pagamentos() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl font-semibold text-foreground">
-            Caixa
-          </h1>
-          <p className="text-muted-foreground">
-            Controle financeiro da clínica
-          </p>
+          <h1 className="font-display text-3xl font-semibold text-foreground">Caixa</h1>
+          <p className="text-muted-foreground">Controle financeiro da clínica</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -181,9 +232,7 @@ export default function Pagamentos() {
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
-              <DialogTitle className="font-display">
-                Novo Lançamento
-              </DialogTitle>
+              <DialogTitle className="font-display">Novo Lançamento</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -191,12 +240,10 @@ export default function Pagamentos() {
                 <Select
                   value={formData.tipo}
                   onValueChange={(value: "entrada" | "saida") =>
-                    setFormData({ ...formData, tipo: value })
+                    setFormData({ ...formData, tipo: value, sessaoId: "" })
                   }
                 >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="entrada">Entrada</SelectItem>
                     <SelectItem value="saida">Saída</SelectItem>
@@ -209,23 +256,61 @@ export default function Pagamentos() {
                   <Input
                     id="clienteNome"
                     value={formData.clienteNome}
-                    onChange={(e) =>
-                      setFormData({ ...formData, clienteNome: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, clienteNome: e.target.value })}
                     placeholder="Nome do cliente"
                   />
                 </div>
               )}
               <div className="space-y-2">
                 <Label htmlFor="descricao">Descrição</Label>
-                <Input
-                  id="descricao"
-                  value={formData.descricao}
-                  onChange={(e) =>
-                    setFormData({ ...formData, descricao: e.target.value })
-                  }
-                  required
-                />
+                {formData.tipo === "entrada" ? (
+                  <div className="space-y-1">
+                    <div className="flex gap-2">
+                      <Input
+                        id="descricao"
+                        value={formData.descricao}
+                        onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                        required
+                        placeholder="Ou selecione uma sessão abaixo"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowSessoesList(!showSessoesList)}
+                      >
+                        Sessões
+                      </Button>
+                    </div>
+                    {showSessoesList && (
+                      <div className="max-h-40 overflow-y-auto border rounded-lg p-1 space-y-1">
+                        {sessoesAgendadas.length === 0 ? (
+                          <p className="text-xs text-muted-foreground p-2">Nenhuma sessão agendada</p>
+                        ) : (
+                          sessoesAgendadas.map((s) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => handleSelectSessao(s)}
+                              className="w-full text-left text-xs p-2 rounded hover:bg-muted transition-colors"
+                            >
+                              <span className="font-medium">{s.cliente?.nome}</span> -{" "}
+                              <span className="text-muted-foreground">{s.tipo_servico}</span> -{" "}
+                              <span className="text-primary">R$ {(s.valor || 0).toFixed(2).replace(".", ",")}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Input
+                    id="descricao"
+                    value={formData.descricao}
+                    onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                    required
+                  />
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -236,9 +321,7 @@ export default function Pagamentos() {
                     step="0.01"
                     min="0"
                     value={formData.valor}
-                    onChange={(e) =>
-                      setFormData({ ...formData, valor: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
                     required
                   />
                 </div>
@@ -250,9 +333,7 @@ export default function Pagamentos() {
                       setFormData({ ...formData, status: value })
                     }
                   >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="pago">Pago</SelectItem>
                       <SelectItem value="pendente">Pendente</SelectItem>
@@ -264,13 +345,9 @@ export default function Pagamentos() {
                 <Label>Forma de Pagamento</Label>
                 <Select
                   value={formData.formaPagamento}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, formaPagamento: value })
-                  }
+                  onValueChange={(value) => setFormData({ ...formData, formaPagamento: value })}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="PIX">PIX</SelectItem>
                     <SelectItem value="Dinheiro">Dinheiro</SelectItem>
@@ -280,26 +357,25 @@ export default function Pagamentos() {
                 </Select>
               </div>
               <div className="flex gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setIsDialogOpen(false)}
-                >
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setIsDialogOpen(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" variant="brand" className="flex-1">
-                  Registrar
-                </Button>
+                <Button type="submit" variant="brand" className="flex-1">Registrar</Button>
               </div>
             </form>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* Stats */}
+      {/* Filters */}
+      <CaixaFilters activeFilter={activeFilter} dateRange={dateRange} onFilterChange={handleFilterChange} />
+
+      {/* Stats - clickable */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="shadow-brand-sm">
+        <Card
+          className="shadow-brand-sm cursor-pointer hover:shadow-brand-md transition-shadow"
+          onClick={() => handleStatusCardClick("pago")}
+        >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-success/10">
@@ -307,14 +383,15 @@ export default function Pagamentos() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Entradas</p>
-                <p className="text-lg font-bold text-success">
-                  {formatCurrency(totalEntradas)}
-                </p>
+                <p className="text-lg font-bold text-success">{formatCurrency(totalEntradas)}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="shadow-brand-sm">
+        <Card
+          className="shadow-brand-sm cursor-pointer hover:shadow-brand-md transition-shadow"
+          onClick={() => handleStatusCardClick("pago")}
+        >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-destructive/10">
@@ -322,14 +399,15 @@ export default function Pagamentos() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Saídas</p>
-                <p className="text-lg font-bold text-destructive">
-                  {formatCurrency(totalSaidas)}
-                </p>
+                <p className="text-lg font-bold text-destructive">{formatCurrency(totalSaidas)}</p>
               </div>
             </div>
           </CardContent>
         </Card>
-        <Card className="shadow-brand-sm">
+        <Card
+          className="shadow-brand-sm cursor-pointer hover:shadow-brand-md transition-shadow"
+          onClick={() => handleStatusCardClick("pendente")}
+        >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-warning/10">
@@ -337,9 +415,7 @@ export default function Pagamentos() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Pendente</p>
-                <p className="text-lg font-bold text-warning">
-                  {formatCurrency(totalPendente)}
-                </p>
+                <p className="text-lg font-bold text-warning">{formatCurrency(totalPendente)}</p>
               </div>
             </div>
           </CardContent>
@@ -352,14 +428,20 @@ export default function Pagamentos() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Saldo</p>
-                <p className="text-lg font-bold text-primary">
-                  {formatCurrency(saldo)}
-                </p>
+                <p className="text-lg font-bold text-primary">{formatCurrency(saldo)}</p>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Active filter indicator */}
+      {statusFilter && (
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary">Filtro: {statusFilter === "pago" ? "Pagos" : "Pendentes"}</Badge>
+          <Button variant="ghost" size="sm" onClick={() => setStatusFilter(null)}>Limpar</Button>
+        </div>
+      )}
 
       {/* Search */}
       <Card className="shadow-brand-sm">
@@ -394,35 +476,28 @@ export default function Pagamentos() {
               <TableBody>
                 {filteredPagamentos.map((pag) => (
                   <TableRow key={pag.id} className="hover:bg-muted/30">
-                    <TableCell className="text-sm">
-                      {formatDate(pag.data)}
-                    </TableCell>
+                    <TableCell className="text-sm">{formatDate(pag.data)}</TableCell>
                     <TableCell className="font-medium">{pag.descricao}</TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {pag.clienteNome}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      {pag.formaPagamento}
-                    </TableCell>
+                    <TableCell className="hidden md:table-cell">{pag.clienteNome}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{pag.formaPagamento}</TableCell>
                     <TableCell
-                      className={`font-bold ${
-                        pag.tipo === "entrada" ? "text-success" : "text-destructive"
-                      }`}
+                      className={`font-bold ${pag.tipo === "entrada" ? "text-success" : "text-destructive"}`}
                     >
-                      {pag.tipo === "entrada" ? "+" : "-"}
-                      {formatCurrency(pag.valor)}
+                      {pag.tipo === "entrada" ? "+" : "-"}{formatCurrency(pag.valor)}
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={pag.status === "pago" ? "default" : "secondary"}
-                        className={
-                          pag.status === "pago"
-                            ? "bg-success text-success-foreground"
-                            : "bg-warning/20 text-warning"
-                        }
-                      >
-                        {pag.status === "pago" ? "Pago" : "Pendente"}
-                      </Badge>
+                      <button onClick={() => handleStatusCardClick(pag.status)}>
+                        <Badge
+                          variant={pag.status === "pago" ? "default" : "secondary"}
+                          className={`cursor-pointer ${
+                            pag.status === "pago"
+                              ? "bg-success text-success-foreground"
+                              : "bg-warning/20 text-warning"
+                          }`}
+                        >
+                          {pag.status === "pago" ? "Pago" : "Pendente"}
+                        </Badge>
+                      </button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -431,6 +506,13 @@ export default function Pagamentos() {
           </div>
         </CardContent>
       </Card>
+
+      <SessaoDetailDialog
+        sessao={selectedSessao}
+        isOpen={isSessaoDetailOpen}
+        onClose={() => setIsSessaoDetailOpen(false)}
+        onStatusUpdate={handleSessaoStatusUpdate}
+      />
     </div>
   );
 }
