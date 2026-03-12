@@ -10,8 +10,6 @@ const corsHeaders = {
 };
 
 interface ApprovalRequest {
-  email: string;
-  nome: string;
   userId: string;
 }
 
@@ -51,10 +49,10 @@ serve(async (req) => {
 
     const authenticatedUserId = claimsData.claims.sub;
 
-    const { email, nome, userId }: ApprovalRequest = await req.json();
+    const { userId }: ApprovalRequest = await req.json();
 
     // Validate inputs
-    if (!email || !userId) {
+    if (!userId) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -74,6 +72,17 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+
+    // Fetch verified user data from auth instead of trusting request body
+    const { data: authUser, error: authUserError } = await adminClient.auth.admin.getUserById(authenticatedUserId);
+    if (authUserError || !authUser?.user) {
+      return new Response(
+        JSON.stringify({ error: "Invalid user" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const email = authUser.user.email || "";
+    const nome = authUser.user.user_metadata?.nome || "";
 
     const { data: existing } = await adminClient
       .from("pending_registrations")
@@ -101,20 +110,6 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "Too many requests. Please try again later." }),
         { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Validate that the userId corresponds to an actual profile
-    const { data: profile } = await adminClient
-      .from("profiles")
-      .select("id")
-      .eq("id", userId)
-      .maybeSingle();
-
-    if (!profile) {
-      return new Response(
-        JSON.stringify({ error: "Invalid user" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
