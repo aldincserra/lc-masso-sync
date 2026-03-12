@@ -127,11 +127,11 @@ serve(async (req) => {
               <div class="info-box">
                 <div class="info-row">
                   <span class="info-label">Nome:</span>
-                  <span class="info-value">${nome || "Não informado"}</span>
+                  <span class="info-value">${escapeHtml(nome || "Não informado")}</span>
                 </div>
                 <div class="info-row">
                   <span class="info-label">Email:</span>
-                  <span class="info-value">${email}</span>
+                  <span class="info-value">${escapeHtml(email)}</span>
                 </div>
               </div>
               <p>Acesse o painel de administração para aprovar ou rejeitar esta solicitação.</p>
