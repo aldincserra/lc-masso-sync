@@ -15,6 +15,10 @@ interface ApprovalRequest {
   userId: string;
 }
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -51,6 +55,21 @@ serve(async (req) => {
       );
     }
 
+    // Time-based rate limit: max 10 pending registrations in the last hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count: recentCount } = await adminClient
+      .from("pending_registrations")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", oneHourAgo)
+      .eq("status", "pendente");
+
+    if (recentCount !== null && recentCount >= 10) {
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Validate that the userId corresponds to an actual profile
     const { data: profile } = await adminClient
       .from("profiles")
@@ -79,7 +98,7 @@ serve(async (req) => {
     const { data, error } = await resend.emails.send({
       from: "Gestão de Atendimentos <onboarding@resend.dev>",
       to: [adminEmail],
-      subject: `🔔 Nova solicitação de acesso: ${nome}`,
+      subject: `🔔 Nova solicitação de acesso: ${escapeHtml(nome || "Não informado")}`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -108,11 +127,11 @@ serve(async (req) => {
               <div class="info-box">
                 <div class="info-row">
                   <span class="info-label">Nome:</span>
-                  <span class="info-value">${nome || "Não informado"}</span>
+                  <span class="info-value">${escapeHtml(nome || "Não informado")}</span>
                 </div>
                 <div class="info-row">
                   <span class="info-label">Email:</span>
-                  <span class="info-value">${email}</span>
+                  <span class="info-value">${escapeHtml(email)}</span>
                 </div>
               </div>
               <p>Acesse o painel de administração para aprovar ou rejeitar esta solicitação.</p>

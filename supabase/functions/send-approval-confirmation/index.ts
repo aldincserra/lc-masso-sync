@@ -14,6 +14,10 @@ interface ApprovalConfirmationRequest {
   nome: string;
 }
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -108,7 +112,7 @@ serve(async (req) => {
             </div>
             <div class="content">
               <div class="welcome-box">
-                <h2>Olá, ${nome || "Usuário"}! 🎉</h2>
+                <h2>Olá, ${escapeHtml(nome || "Usuário")}! 🎉</h2>
                 <p>Sua conta foi aprovada e você já pode acessar o sistema.</p>
               </div>
               
