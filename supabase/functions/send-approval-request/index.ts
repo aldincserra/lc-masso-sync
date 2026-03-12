@@ -55,6 +55,21 @@ serve(async (req) => {
       );
     }
 
+    // Time-based rate limit: max 10 pending registrations in the last hour
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count: recentCount } = await adminClient
+      .from("pending_registrations")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", oneHourAgo)
+      .eq("status", "pendente");
+
+    if (recentCount !== null && recentCount >= 10) {
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Validate that the userId corresponds to an actual profile
     const { data: profile } = await adminClient
       .from("profiles")
