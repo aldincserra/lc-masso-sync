@@ -10,8 +10,6 @@ const corsHeaders = {
 };
 
 interface ApprovalRequest {
-  email: string;
-  nome: string;
   userId: string;
 }
 
