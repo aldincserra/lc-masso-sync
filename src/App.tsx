@@ -18,6 +18,7 @@ import Recibos from "./pages/Recibos";
 import NotFound from "./pages/NotFound";
 import Instalar from "./pages/Instalar";
 import Admin from "./pages/Admin";
+import { AdminRoute } from "./components/AdminRoute";
 
 const queryClient = new QueryClient();
 
@@ -105,7 +106,7 @@ const App = () => (
             <Route path="pagamentos" element={<Pagamentos />} />
             <Route path="pacotes" element={<Pacotes />} />
             <Route path="recibos" element={<Recibos />} />
-            <Route path="admin" element={<Admin />} />
+            <Route path="admin" element={<AdminRoute><Admin /></AdminRoute>} />
           </Route>
           <Route path="/instalar" element={<Instalar />} />
           <Route path="*" element={<NotFound />} />
