@@ -18,6 +18,7 @@ import Recibos from "./pages/Recibos";
 import NotFound from "./pages/NotFound";
 import Instalar from "./pages/Instalar";
 import Admin from "./pages/Admin";
+import { AdminRoute } from "./components/AdminRoute";
 
 const queryClient = new QueryClient();
 
