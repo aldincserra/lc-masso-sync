@@ -28,6 +28,8 @@ import { Plus, Search, MoreVertical, Pencil, Trash2, Phone, Users, History, Load
 import { useClientes, ClienteFormData, Cliente } from "@/hooks/useClientes";
 import { useSessoes } from "@/hooks/useSessoes";
 import { ClienteHistoricoDialog } from "@/components/ClienteHistoricoDialog";
+import { formatPhone, isPhoneValid, formatCPF, isCPFValid, isEmailValid } from "@/lib/validators";
+import { useToast } from "@/hooks/use-toast";
 
 export default function Clientes() {
   const { clientes, loading, addCliente, updateCliente, deleteCliente } = useClientes();
@@ -38,6 +40,8 @@ export default function Clientes() {
   const [historicoCliente, setHistoricoCliente] = useState<Cliente | null>(null);
   const [isHistoricoOpen, setIsHistoricoOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const { toast } = useToast();
 
   const [formData, setFormData] = useState<ClienteFormData>({
     nome: "",
@@ -56,6 +60,7 @@ export default function Clientes() {
   );
 
   const handleOpenDialog = (cliente?: Cliente) => {
+    setErrors({});
     if (cliente) {
       setEditingCliente(cliente);
       setFormData({
@@ -68,31 +73,61 @@ export default function Clientes() {
       });
     } else {
       setEditingCliente(null);
-      setFormData({
-        nome: "",
-        celular: "",
-        email: "",
-        data_nascimento: "",
-        cpf: "",
-        observacoes: "",
-      });
+      setFormData({ nome: "", celular: "", email: "", data_nascimento: "", cpf: "", observacoes: "" });
     }
     setIsDialogOpen(true);
   };
 
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {};
+
+    if (formData.celular && !isPhoneValid(formData.celular)) {
+      newErrors.celular = "Celular deve ter 11 dígitos";
+    }
+
+    if (formData.cpf && !isCPFValid(formData.cpf)) {
+      newErrors.cpf = "CPF inválido";
+    }
+
+    if (formData.email && !isEmailValid(formData.email)) {
+      newErrors.email = "E-mail inválido";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validateForm()) {
+      toast({ title: "Verifique os campos", description: "Corrija os erros indicados.", variant: "destructive" });
+      return;
+    }
+
     setSubmitting(true);
-    
     if (editingCliente) {
       await updateCliente(editingCliente.id, formData);
     } else {
       await addCliente(formData);
     }
-    
     setIsDialogOpen(false);
     setEditingCliente(null);
     setSubmitting(false);
+  };
+
+  const handlePhoneChange = (value: string) => {
+    setFormData({ ...formData, celular: formatPhone(value) });
+    if (errors.celular) setErrors({ ...errors, celular: "" });
+  };
+
+  const handleCPFChange = (value: string) => {
+    setFormData({ ...formData, cpf: formatCPF(value) });
+    if (errors.cpf) setErrors({ ...errors, cpf: "" });
+  };
+
+  const handleEmailChange = (value: string) => {
+    setFormData({ ...formData, email: value });
+    if (errors.email) setErrors({ ...errors, email: "" });
   };
 
   const handleDelete = async (cliente: Cliente) => {
@@ -122,12 +157,8 @@ export default function Clientes() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl font-semibold text-foreground">
-            Clientes
-          </h1>
-          <p className="text-muted-foreground">
-            Gerencie seus clientes e informações de contato
-          </p>
+          <h1 className="font-display text-3xl font-semibold text-foreground">Clientes</h1>
+          <p className="text-muted-foreground">Gerencie seus clientes e informações de contato</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -148,9 +179,7 @@ export default function Clientes() {
                 <Input
                   id="nome"
                   value={formData.nome}
-                  onChange={(e) =>
-                    setFormData({ ...formData, nome: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                   required
                 />
               </div>
@@ -160,34 +189,33 @@ export default function Clientes() {
                   <Input
                     id="celular"
                     value={formData.celular}
-                    onChange={(e) =>
-                      setFormData({ ...formData, celular: e.target.value })
-                    }
+                    onChange={(e) => handlePhoneChange(e.target.value)}
                     placeholder="(00) 00000-0000"
+                    maxLength={15}
                   />
+                  {errors.celular && <p className="text-xs text-destructive">{errors.celular}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="cpf">CPF</Label>
                   <Input
                     id="cpf"
                     value={formData.cpf}
-                    onChange={(e) =>
-                      setFormData({ ...formData, cpf: e.target.value })
-                    }
+                    onChange={(e) => handleCPFChange(e.target.value)}
                     placeholder="000.000.000-00"
+                    maxLength={14}
                   />
+                  {errors.cpf && <p className="text-xs text-destructive">{errors.cpf}</p>}
                 </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">E-mail</Label>
                 <Input
                   id="email"
-                  type="email"
+                  type="text"
                   value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
+                  onChange={(e) => handleEmailChange(e.target.value)}
                 />
+                {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="dataNascimento">Data de Nascimento</Label>
@@ -195,18 +223,11 @@ export default function Clientes() {
                   id="dataNascimento"
                   type="date"
                   value={formData.data_nascimento}
-                  onChange={(e) =>
-                    setFormData({ ...formData, data_nascimento: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, data_nascimento: e.target.value })}
                 />
               </div>
               <div className="flex gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={() => setIsDialogOpen(false)}
-                >
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setIsDialogOpen(false)}>
                   Cancelar
                 </Button>
                 <Button type="submit" variant="brand" className="flex-1" disabled={submitting}>
@@ -267,18 +288,10 @@ export default function Clientes() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">
-                      {cliente.celular || "-"}
-                    </TableCell>
-                    <TableCell className="hidden lg:table-cell">
-                      {cliente.email || "-"}
-                    </TableCell>
-                    <TableCell className="hidden xl:table-cell">
-                      {formatDate(cliente.data_nascimento)}
-                    </TableCell>
-                    <TableCell className="hidden xl:table-cell">
-                      {cliente.cpf || "-"}
-                    </TableCell>
+                    <TableCell className="hidden md:table-cell">{cliente.celular || "-"}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{cliente.email || "-"}</TableCell>
+                    <TableCell className="hidden xl:table-cell">{formatDate(cliente.data_nascimento)}</TableCell>
+                    <TableCell className="hidden xl:table-cell">{cliente.cpf || "-"}</TableCell>
                     <TableCell>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -287,22 +300,15 @@ export default function Clientes() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => handleViewHistorico(cliente)}
-                          >
+                          <DropdownMenuItem onClick={() => handleViewHistorico(cliente)}>
                             <History className="h-4 w-4 mr-2" />
                             Ver Histórico
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => handleOpenDialog(cliente)}
-                          >
+                          <DropdownMenuItem onClick={() => handleOpenDialog(cliente)}>
                             <Pencil className="h-4 w-4 mr-2" />
                             Editar
                           </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive"
-                            onClick={() => handleDelete(cliente)}
-                          >
+                          <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(cliente)}>
                             <Trash2 className="h-4 w-4 mr-2" />
                             Excluir
                           </DropdownMenuItem>
@@ -323,7 +329,6 @@ export default function Clientes() {
         </CardContent>
       </Card>
 
-      {/* Historico Dialog */}
       <ClienteHistoricoDialog
         cliente={historicoCliente}
         sessoes={historicoCliente ? getSessoesCliente(historicoCliente.id) : []}
