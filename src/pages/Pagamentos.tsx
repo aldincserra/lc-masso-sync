@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,70 +27,16 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, TrendingUp, TrendingDown, DollarSign, Search } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, DollarSign, Search, Loader2 } from "lucide-react";
 import { CaixaFilters, CaixaFilterType, CaixaDateRange } from "@/components/caixa/CaixaFilters";
 import { useSessoes, Sessao } from "@/hooks/useSessoes";
+import { usePagamentos } from "@/hooks/usePagamentos";
+import { useClientes } from "@/hooks/useClientes";
 import { startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
 import { SessaoDetailDialog } from "@/components/sessao/SessaoDetailDialog";
 
-interface Pagamento {
-  id: string;
-  clienteNome: string;
-  descricao: string;
-  valor: number;
-  data: string;
-  tipo: "entrada" | "saida";
-  formaPagamento: string;
-  status: "pago" | "pendente";
-  sessaoId?: string;
-}
-
-const pagamentosMock: Pagamento[] = [
-  {
-    id: "1",
-    clienteNome: "Maria Silva",
-    descricao: "Massagem Relaxante",
-    valor: 150.0,
-    data: "2024-12-10",
-    tipo: "entrada",
-    formaPagamento: "PIX",
-    status: "pago",
-  },
-  {
-    id: "2",
-    clienteNome: "João Santos",
-    descricao: "Pacote 5 sessões",
-    valor: 600.0,
-    data: "2024-12-09",
-    tipo: "entrada",
-    formaPagamento: "Cartão",
-    status: "pago",
-  },
-  {
-    id: "3",
-    clienteNome: "Marta Souza",
-    descricao: "Drenagem Linfática",
-    valor: 120.0,
-    data: "2024-12-08",
-    tipo: "entrada",
-    formaPagamento: "-",
-    status: "pendente",
-  },
-  {
-    id: "4",
-    clienteNome: "-",
-    descricao: "Óleos essenciais",
-    valor: 85.0,
-    data: "2024-12-07",
-    tipo: "saida",
-    formaPagamento: "Débito",
-    status: "pago",
-  },
-];
-
 export default function Pagamentos() {
   const hoje = new Date();
-  const [pagamentos, setPagamentos] = useState<Pagamento[]>(pagamentosMock);
   const [searchTerm, setSearchTerm] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -100,16 +46,18 @@ export default function Pagamentos() {
     to: endOfMonth(hoje),
   });
   const { sessoes } = useSessoes();
+  const { pagamentos, loading, fetchPagamentos, addPagamento } = usePagamentos();
+  const { clientes } = useClientes();
   const [selectedSessao, setSelectedSessao] = useState<Sessao | null>(null);
   const [isSessaoDetailOpen, setIsSessaoDetailOpen] = useState(false);
   const { toast } = useToast();
 
-  // For entry description - show sessions list
   const [showSessoesList, setShowSessoesList] = useState(false);
   const sessoesAgendadas = sessoes.filter(s => s.status === "agendada");
 
   const [formData, setFormData] = useState({
     clienteNome: "",
+    clienteId: "",
     descricao: "",
     valor: "",
     tipo: "entrada" as "entrada" | "saida",
@@ -123,18 +71,28 @@ export default function Pagamentos() {
     setDateRange(range);
   };
 
+  // Map pagamentos to displayable rows
+  const displayRows = pagamentos.map((p) => ({
+    id: p.id,
+    clienteNome: p.cliente?.nome || "-",
+    descricao: p.sessao?.tipo_servico || (p.forma_pagamento ? "Pagamento" : "Lançamento"),
+    valor: p.valor,
+    data: p.data_pagamento,
+    tipo: "entrada" as const, // pagamentos table stores entries; for saidas we check valor sign or status
+    formaPagamento: p.forma_pagamento || "-",
+    status: (p.status || "pendente") as "pago" | "pendente",
+  }));
+
   // Filter by date range
-  const dateFilteredPagamentos = pagamentos.filter((p) => {
-    const pDate = new Date(p.data);
+  const dateFilteredPagamentos = displayRows.filter((p) => {
+    const pDate = new Date(p.data + "T12:00:00");
     return isWithinInterval(pDate, { start: dateRange.from, end: dateRange.to });
   });
 
-  // Filter by status
   const statusFilteredPagamentos = statusFilter
     ? dateFilteredPagamentos.filter((p) => p.status === statusFilter)
     : dateFilteredPagamentos;
 
-  // Filter by search
   const filteredPagamentos = statusFilteredPagamentos.filter(
     (p) =>
       p.clienteNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -142,12 +100,10 @@ export default function Pagamentos() {
   );
 
   const totalEntradas = dateFilteredPagamentos
-    .filter((p) => p.tipo === "entrada" && p.status === "pago")
+    .filter((p) => p.status === "pago")
     .reduce((sum, p) => sum + p.valor, 0);
 
-  const totalSaidas = dateFilteredPagamentos
-    .filter((p) => p.tipo === "saida" && p.status === "pago")
-    .reduce((sum, p) => sum + p.valor, 0);
+  const totalSaidas = 0; // saídas not tracked in pagamentos table yet
 
   const totalPendente = dateFilteredPagamentos
     .filter((p) => p.status === "pendente")
@@ -160,31 +116,41 @@ export default function Pagamentos() {
       ...formData,
       descricao: `${sessao.tipo_servico || "Sessão"} - ${sessao.cliente?.nome || "Cliente"}`,
       clienteNome: sessao.cliente?.nome || "",
+      clienteId: sessao.cliente_id,
       valor: (sessao.valor || 0).toString(),
       sessaoId: sessao.id,
     });
     setShowSessoesList(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const novoPagamento: Pagamento = {
-      id: Date.now().toString(),
-      clienteNome: formData.clienteNome || "-",
-      descricao: formData.descricao,
-      valor: parseFloat(formData.valor),
-      data: new Date().toISOString().split("T")[0],
-      tipo: formData.tipo,
-      formaPagamento: formData.formaPagamento,
-      status: formData.status,
-      sessaoId: formData.sessaoId || undefined,
-    };
+    // Find client id
+    let clienteId = formData.clienteId;
+    if (!clienteId && formData.clienteNome) {
+      const found = clientes.find(c => c.nome.toLowerCase() === formData.clienteNome.toLowerCase());
+      if (found) clienteId = found.id;
+    }
 
-    setPagamentos([novoPagamento, ...pagamentos]);
+    if (!clienteId) {
+      toast({ title: "Selecione um cliente válido", variant: "destructive" });
+      return;
+    }
+
+    await addPagamento({
+      cliente_id: clienteId,
+      sessao_id: formData.sessaoId || undefined,
+      valor: parseFloat(formData.valor),
+      data_pagamento: new Date().toISOString().split("T")[0],
+      forma_pagamento: formData.formaPagamento,
+      status: formData.status,
+    });
+
     setIsDialogOpen(false);
     setFormData({
       clienteNome: "",
+      clienteId: "",
       descricao: "",
       valor: "",
       tipo: "entrada",
@@ -192,32 +158,24 @@ export default function Pagamentos() {
       status: "pago",
       sessaoId: "",
     });
-
-    toast({
-      title: "Lançamento registrado!",
-      description: `${formData.descricao} - R$ ${formData.valor}`,
-    });
   };
 
-  const formatCurrency = (value: number) => {
-    return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-  };
+  const formatCurrency = (value: number) =>
+    value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("pt-BR");
-  };
+  const formatDate = (dateStr: string) =>
+    new Date(dateStr + "T12:00:00").toLocaleDateString("pt-BR");
 
   const handleStatusCardClick = (status: string | null) => {
     setStatusFilter(statusFilter === status ? null : status);
   };
 
-  const handleSessaoStatusUpdate = (updated: Sessao) => {
-    // Refresh handled by hooks
+  const handleSessaoStatusUpdate = () => {
+    fetchPagamentos();
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="font-display text-3xl font-semibold text-foreground">Caixa</h1>
@@ -236,81 +194,63 @@ export default function Pagamentos() {
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label>Tipo</Label>
+                <Label>Cliente</Label>
                 <Select
-                  value={formData.tipo}
-                  onValueChange={(value: "entrada" | "saida") =>
-                    setFormData({ ...formData, tipo: value, sessaoId: "" })
-                  }
+                  value={formData.clienteId}
+                  onValueChange={(value) => {
+                    const cliente = clientes.find(c => c.id === value);
+                    setFormData({ ...formData, clienteId: value, clienteNome: cliente?.nome || "" });
+                  }}
                 >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="entrada">Entrada</SelectItem>
-                    <SelectItem value="saida">Saída</SelectItem>
+                    {clientes.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
-              {formData.tipo === "entrada" && (
-                <div className="space-y-2">
-                  <Label htmlFor="clienteNome">Cliente</Label>
-                  <Input
-                    id="clienteNome"
-                    value={formData.clienteNome}
-                    onChange={(e) => setFormData({ ...formData, clienteNome: e.target.value })}
-                    placeholder="Nome do cliente"
-                  />
-                </div>
-              )}
               <div className="space-y-2">
                 <Label htmlFor="descricao">Descrição</Label>
-                {formData.tipo === "entrada" ? (
-                  <div className="space-y-1">
-                    <div className="flex gap-2">
-                      <Input
-                        id="descricao"
-                        value={formData.descricao}
-                        onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                        required
-                        placeholder="Ou selecione uma sessão abaixo"
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setShowSessoesList(!showSessoesList)}
-                      >
-                        Sessões
-                      </Button>
-                    </div>
-                    {showSessoesList && (
-                      <div className="max-h-40 overflow-y-auto border rounded-lg p-1 space-y-1">
-                        {sessoesAgendadas.length === 0 ? (
-                          <p className="text-xs text-muted-foreground p-2">Nenhuma sessão agendada</p>
-                        ) : (
-                          sessoesAgendadas.map((s) => (
-                            <button
-                              key={s.id}
-                              type="button"
-                              onClick={() => handleSelectSessao(s)}
-                              className="w-full text-left text-xs p-2 rounded hover:bg-muted transition-colors"
-                            >
-                              <span className="font-medium">{s.cliente?.nome}</span> -{" "}
-                              <span className="text-muted-foreground">{s.tipo_servico}</span> -{" "}
-                              <span className="text-primary">R$ {(s.valor || 0).toFixed(2).replace(".", ",")}</span>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    )}
+                <div className="space-y-1">
+                  <div className="flex gap-2">
+                    <Input
+                      id="descricao"
+                      value={formData.descricao}
+                      onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                      required
+                      placeholder="Ou selecione uma sessão abaixo"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowSessoesList(!showSessoesList)}
+                    >
+                      Sessões
+                    </Button>
                   </div>
-                ) : (
-                  <Input
-                    id="descricao"
-                    value={formData.descricao}
-                    onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                    required
-                  />
-                )}
+                  {showSessoesList && (
+                    <div className="max-h-40 overflow-y-auto border rounded-lg p-1 space-y-1">
+                      {sessoesAgendadas.length === 0 ? (
+                        <p className="text-xs text-muted-foreground p-2">Nenhuma sessão agendada</p>
+                      ) : (
+                        sessoesAgendadas.map((s) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => handleSelectSessao(s)}
+                            className="w-full text-left text-xs p-2 rounded hover:bg-muted transition-colors"
+                          >
+                            <span className="font-medium">{s.cliente?.nome}</span> -{" "}
+                            <span className="text-muted-foreground">{s.tipo_servico}</span> -{" "}
+                            <span className="text-primary">R$ {(s.valor || 0).toFixed(2).replace(".", ",")}</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -367,10 +307,8 @@ export default function Pagamentos() {
         </Dialog>
       </div>
 
-      {/* Filters */}
       <CaixaFilters activeFilter={activeFilter} dateRange={dateRange} onFilterChange={handleFilterChange} />
 
-      {/* Stats - clickable */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card
           className="shadow-brand-sm cursor-pointer hover:shadow-brand-md transition-shadow"
@@ -435,7 +373,6 @@ export default function Pagamentos() {
         </Card>
       </div>
 
-      {/* Active filter indicator */}
       {statusFilter && (
         <div className="flex items-center gap-2">
           <Badge variant="secondary">Filtro: {statusFilter === "pago" ? "Pagos" : "Pendentes"}</Badge>
@@ -443,7 +380,6 @@ export default function Pagamentos() {
         </div>
       )}
 
-      {/* Search */}
       <Card className="shadow-brand-sm">
         <CardContent className="p-4">
           <div className="relative">
@@ -458,52 +394,63 @@ export default function Pagamentos() {
         </CardContent>
       </Card>
 
-      {/* Table */}
       <Card className="shadow-brand-sm overflow-hidden">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/50">
-                  <TableHead>Data</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead className="hidden md:table-cell">Cliente</TableHead>
-                  <TableHead className="hidden lg:table-cell">Pagamento</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Status</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredPagamentos.map((pag) => (
-                  <TableRow key={pag.id} className="hover:bg-muted/30">
-                    <TableCell className="text-sm">{formatDate(pag.data)}</TableCell>
-                    <TableCell className="font-medium">{pag.descricao}</TableCell>
-                    <TableCell className="hidden md:table-cell">{pag.clienteNome}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{pag.formaPagamento}</TableCell>
-                    <TableCell
-                      className={`font-bold ${pag.tipo === "entrada" ? "text-success" : "text-destructive"}`}
-                    >
-                      {pag.tipo === "entrada" ? "+" : "-"}{formatCurrency(pag.valor)}
-                    </TableCell>
-                    <TableCell>
-                      <button onClick={() => handleStatusCardClick(pag.status)}>
-                        <Badge
-                          variant={pag.status === "pago" ? "default" : "secondary"}
-                          className={`cursor-pointer ${
-                            pag.status === "pago"
-                              ? "bg-success text-success-foreground"
-                              : "bg-warning/20 text-warning"
-                          }`}
-                        >
-                          {pag.status === "pago" ? "Pago" : "Pendente"}
-                        </Badge>
-                      </button>
-                    </TableCell>
+          {loading ? (
+            <div className="flex items-center justify-center p-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead>Data</TableHead>
+                    <TableHead>Descrição</TableHead>
+                    <TableHead className="hidden md:table-cell">Cliente</TableHead>
+                    <TableHead className="hidden lg:table-cell">Pagamento</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {filteredPagamentos.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        Nenhum lançamento encontrado
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredPagamentos.map((pag) => (
+                      <TableRow key={pag.id} className="hover:bg-muted/30">
+                        <TableCell className="text-sm">{formatDate(pag.data)}</TableCell>
+                        <TableCell className="font-medium">{pag.descricao}</TableCell>
+                        <TableCell className="hidden md:table-cell">{pag.clienteNome}</TableCell>
+                        <TableCell className="hidden lg:table-cell">{pag.formaPagamento}</TableCell>
+                        <TableCell className="font-bold text-success">
+                          +{formatCurrency(pag.valor)}
+                        </TableCell>
+                        <TableCell>
+                          <button onClick={() => handleStatusCardClick(pag.status)}>
+                            <Badge
+                              variant={pag.status === "pago" ? "default" : "secondary"}
+                              className={`cursor-pointer ${
+                                pag.status === "pago"
+                                  ? "bg-success text-success-foreground"
+                                  : "bg-warning/20 text-warning"
+                              }`}
+                            >
+                              {pag.status === "pago" ? "Pago" : "Pendente"}
+                            </Badge>
+                          </button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
 
